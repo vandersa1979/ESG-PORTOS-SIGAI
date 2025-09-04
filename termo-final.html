@@ -1,0 +1,244 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ATESTADO DE CONFORMIDADE • Água de Lastro • MAV-IT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>@media print{@page{size:A4;margin:12mm}}</style>
+</head>
+<body>
+  <div class="container" id="capture">
+    <div class="header">
+      <div class="brand"><div class="logoDot"></div><div class="brandText">MAV‑IT • BW COMP</div></div>
+      <div class="docTitle">ATESTADO DE CONFORMIDADE</div>
+    </div>
+    <div class="card">
+      <table class="table" style="margin-bottom:8px">
+        <tr>
+          <th>Status</th><td id="statusCell"></td>
+          <th>Base legal</th><td>Art. 13 da NAP.SUMAS.OPR 023.2024</td>
+        </tr>
+      </table>
+
+      <h2 class="section-title">1) Identificação do Navio</h2>
+      <div class="grid cols-2" style="margin-bottom:6px">
+        <div class="field-row"><div class="lab">Embarcação</div><div id="f_ship"></div></div>
+        <div class="field-row"><div class="lab">IMO</div><div id="f_imo"></div></div>
+        <div class="field-row"><div class="lab">Porto de chegada</div><div id="f_port"></div></div>
+        <div class="field-row"><div class="lab">Data de chegada</div><div id="f_date"></div></div>
+        <div class="field-row"><div class="lab">Volume a bordo (m³)</div><div id="f_onb"></div></div>
+        <div class="field-row"><div class="lab">Volume a descarregar (m³)</div><div id="f_dis"></div></div>
+      </div>
+
+      <h2 class="section-title">2) Certificados</h2>
+      <table class="table">
+        <tr><th>IBWMC</th><td id="ibwmc_desc"></td><th>Validade</th><td id="ibwmc_valid"></td></tr>
+        <tr><th>IBWMS (USCG)</th><td id="ibwms_desc"></td><th>Expira</th><td id="ibwms_exp"></td></tr>
+      </table>
+
+      <h2 class="section-title" style="margin-top:8px">3) Crítica de Conformidade</h2>
+      <table class="table" id="tbl-div">
+        <tr><th>Campo</th><th>Valores</th><th>Status</th></tr>
+      </table>
+
+      <h2 class="section-title" style="margin-top:8px">4) Resumo das Não Conformidades (texto)</h2>
+      <div id="nc-text" class="small"></div>
+
+      <div class="sigCenter">
+        <div class="sigName">MAV‑IT</div>
+        <div class="sigRole"><b>MAV‑IT TECNOLOGIA EM INTELIGÊNCIA ARTIFICIAL PARA SEGURANÇA DE PORTOS</b></div>
+        <div class="sigGov">ASSINATURA DIGITAL GOVERNAMENTAL — CNPJ 60.753.111/0001-09</div>
+        <div class="sigStamp"><b>Timestamp:</b> <span id="ts"></span> &nbsp;•&nbsp; <b>SHA‑256:</b> <span id="hash"></span></div>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px" class="no-print">
+      <button class="btn" onclick="baixarPDF()">Baixar PDF (1 folha)</button>
+      <button class="btn secondary" onclick="window.print()">Imprimir</button>
+    </div>
+  </div>
+
+<script>
+function currentUser(){ return localStorage.getItem('usuarioLogado')||'anon'; }
+
+function saveToHistory(snapshot){
+  try{
+    const key = 'atestados_'+currentUser();
+    const arr = JSON.parse(localStorage.getItem(key)||'[]');
+    if(!arr.find(x => x.hash===snapshot.hash && x.ts===snapshot.ts)){
+      arr.unshift({
+        id: snapshot.hash.slice(0,10)+'_'+Date.now(),
+        ship: snapshot.inputs?.nome_embarcacao||'',
+        imo: snapshot.inputs?.imo||'',
+        port: snapshot.inputs?.porto_chegada||'',
+        ts: snapshot.ts,
+        approved: snapshot.approved,
+        hash: snapshot.hash,
+        snapshot: snapshot
+      });
+      localStorage.setItem(key, JSON.stringify(arr));
+    }
+  }catch(e){ console.warn('history save error', e); }
+}
+
+function buildNcText(diverg, findings){
+  if(diverg.length===0){
+    return '<span class="badge ok">Sem não conformidades</span>';
+  }
+  // Mapa de rótulos por campo (alinha na mesma ordem usada no compare)
+  const srcMap = {
+    shipName:['Digitado','IBWMC','BWRF','IBWMP'],
+    imo:['Digitado','IBWMC'],
+    arrivalPort:['Digitado','BWRF'],
+    arrivalDate:['Digitado','BWRF'],
+    totalOnBoard:['Digitado','BWRF'],
+    totalToDischarge:['Digitado','BWRF'],
+    method:['IBWMC','IBWMP'],
+    manufacturer:['IBWMC','IBWMS'],
+    bwmsName:['IBWMS'],
+    approval:['IBWMS'],
+    validUntil:['IBWMC']
+  };
+  const lines = diverg.map(f=>{
+    const labs = f.labels || srcMap[f.field] || [];
+    const pairs = (f.values||[]).map((v,i)=>`${labs[i]||('Fonte '+(i+1))}: "${String(v)}"`).join('; ');
+    return `• <b>${f.label}:</b> ${pairs}.`;
+  });
+  return '<ul style="margin:6px 0 0 16px;"><li>'+lines.join('</li><li>')+'</li></ul>';
+}
+
+function fill(){
+  const fromHistory = JSON.parse(localStorage.getItem('bw_snapshot')||'null');
+  const inputs = fromHistory?.inputs || JSON.parse(localStorage.getItem('bw_inputs')||'{}');
+  const docs = fromHistory?.docs || JSON.parse(localStorage.getItem('bw_docs')||'{}');
+  const findings = fromHistory?.findings || JSON.parse(localStorage.getItem('bw_findings')||'[]');
+
+  const get = (v)=> v==null||v===''?'-':String(v);
+  document.getElementById('f_ship').textContent = get(inputs.nome_embarcacao);
+  document.getElementById('f_imo').textContent = get(inputs.imo);
+  document.getElementById('f_port').textContent = get(inputs.porto_chegada);
+  document.getElementById('f_date').textContent = get(inputs.data_chegada);
+  document.getElementById('f_onb').textContent = get(inputs.volume_bordo);
+  document.getElementById('f_dis').textContent = get(inputs.volume_descarga);
+
+  const ibwmc = docs.IBWMC || {}; const ibwms = docs.IBWMS || {};
+  document.getElementById('ibwmc_desc').textContent = get(`Método ${ibwmc.method||'n/d'} • Fabricante ${ibwmc.manufacturer||'n/d'}`);
+  document.getElementById('ibwmc_valid').textContent = get(ibwmc.validUntil||'n/d');
+  document.getElementById('ibwms_desc').textContent = get(`${ibwms.bwmsName||'n/d'} • Approval ${ibwms.approval||'n/d'}`);
+  document.getElementById('ibwms_exp').textContent = get(ibwms.expires||'n/d');
+
+  const table = document.getElementById('tbl-div');
+  const diverg = findings.filter(f=>!f.match);
+  if(diverg.length===0){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="3"><span class="badge ok">SEM DIVERGÊNCIAS</span></td>`;
+    table.appendChild(tr);
+  } else {
+    diverg.forEach(f=>{
+      const labs = f.labels || [];
+      const tr = document.createElement('tr');
+      const vals = (f.values||[]).map((v,i)=>`${labs[i]?('<b>'+labs[i]+':</b> '):''}${String(v)}`).join(' • ');
+      tr.innerHTML = `<td>${f.label}</td><td>${vals}</td><td><span class="badge error">NÃO CONFORME</span></td>`;
+      table.appendChild(tr);
+    });
+  }
+  document.getElementById('nc-text').innerHTML = buildNcText(diverg, findings);
+
+  const approved = fromHistory?.approved ?? (diverg.length===0);
+  const statusCell = document.getElementById('statusCell');
+  if(approved){
+    statusCell.innerHTML = '<span class="badge ok">APROVADO</span>';
+  } else {
+    statusCell.innerHTML = '<span class="badge error">REPROVADO POR CONTER NÃO CONFORMIDADES</span>';
+  }
+
+  if(fromHistory){
+    document.getElementById('ts').textContent = fromHistory.ts;
+    document.getElementById('hash').textContent = fromHistory.hash;
+  }else{
+    const now = new Date();
+    const ts = now.toLocaleString(undefined,{hour12:false});
+    document.getElementById('ts').textContent = ts;
+    const payload = JSON.stringify({inputs, docs, findings, ts, approved});
+    const enc = new TextEncoder().encode(payload);
+    crypto.subtle.digest('SHA-256', enc).then(buf=>{
+      const hashArr = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+      document.getElementById('hash').textContent = hashArr;
+      const snapshot = {inputs, docs, findings, ts, approved, hash: hashArr};
+      saveToHistory(snapshot);
+    });
+  }
+  localStorage.removeItem('bw_snapshot');
+}
+
+
+function buildRecordForGitHub(){
+  // Monta payload padronizado para gravação
+  const fromHistory = JSON.parse(localStorage.getItem('bw_snapshot')||'null');
+  const inputs = fromHistory?.inputs || JSON.parse(localStorage.getItem('bw_inputs')||'{}');
+  const docs = fromHistory?.docs || JSON.parse(localStorage.getItem('bw_docs')||'{}');
+  const findings = fromHistory?.findings || JSON.parse(localStorage.getItem('bw_findings')||'[]');
+  const ts = document.getElementById('ts')?.textContent || new Date().toLocaleString();
+  const hash = document.getElementById('hash')?.textContent || null;
+  // Padroniza campos principais
+  const record = {
+    empresa: inputs.empresa || inputs.cliente || "",
+    navio: inputs.nome_embarcacao || "",
+    imo: inputs.imo || "",
+    carga: inputs.carga || "",
+    tipo_gerenciamento: (docs.IBWMC?.method || inputs.tipo_gerenciamento || "").toUpperCase(),
+    tipo_operacao: (inputs.tipo_operacao || "").toUpperCase(),
+    porto_destino: "SANTOS", // conforme orientação
+    data_chegada: inputs.data_chegada || "",
+    volume_bordo: inputs.volume_bordo || "",
+    volume_descarga: inputs.volume_descarga || "",
+    status_atestado: document.querySelector('#statusCell .badge.ok') ? "ATESTADO_DE_CONFORMIDADE" : "NAO_CONFORME",
+    ts_local: ts,
+    pdf_hash_sha256: hash,
+    docs: docs,
+    nao_conformes: findings
+  };
+  return record;
+}
+
+async function baixarPDF(){
+
+  const node = document.getElementById('capture');
+  const opt = { margin:0, filename:'ATESTADO_DE_CONFORMIDADE_MAVIT.pdf',
+    image:{ type:'jpeg', quality:0.98 },
+    html2canvas:{ scale:2, useCORS:true, letterRendering:true },
+    jsPDF:{ unit:'mm', format:'a4', orientation:'portrait' } };
+  
+  // Tenta salvar no GitHub antes de baixar
+  try{
+    if (window.salvarNoGitHub) {
+      const rec = buildRecordForGitHub();
+      const resp = await window.salvarNoGitHub(rec);
+      console.log('Gravado no GitHub:', resp);
+      alert(`Registro salvo no GitHub!\nID: ${resp.id || '(via server)'}\n${resp.path||''}`);
+    } else {
+      console.warn('salvarNoGitHub não disponível - verifique db/db.js');
+    }
+  }catch(e){
+    console.error('Falha ao salvar no GitHub:', e);
+    alert('Não foi possível salvar no GitHub agora. O PDF será baixado normalmente.');
+  }
+  html2pdf().set(opt).from(node).save();
+
+}
+fill();
+</script>
+
+    <!-- DB on GitHub -->
+    <script src="db/config.js"></script>
+    <script src="db/read.js"></script>
+    <script src="db/db.js"></script>
+
+</body>
+</html>

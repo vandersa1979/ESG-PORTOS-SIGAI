@@ -1,0 +1,68 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login • CERTIFICADO DE CONFORMIDADE - ÁGUA DE LASTRO • MAV-IT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <section class="hero">
+    <header class="header">
+      <div class="brand"><div class="logoDot"></div><div class="brandText">MAV‑IT • IA • ESG • PORTOS</div></div>
+    </header>
+    <div class="hero-inner">
+      <div class="hero-copy">
+        <h1>Água de Lastro • Portos Ambientalmente Seguros</h1>
+        <p>Emita o <b>ATESTADO DE CONFORMIDADE</b> com verificação automática entre IBWMC, IBWMS, Report Form e IBWMP.
+        Solução MAV‑IT com foco em <b>ESG</b>, IA e governança portuária.</p>
+      </div>
+      <div class="login-card">
+        <div class="label">E‑mail</div>
+        <input class="input" id="email" type="email" placeholder="voce@empresa.com" autocomplete="username">
+        <div class="label">Senha</div>
+        <input class="input" id="senha" type="password" placeholder="••••••••" autocomplete="current-password">
+        <div class="small" style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+          <label><input type="checkbox" id="lembrar"> Lembrar de mim</label>
+          <a href="#" class="small" style="color:#1C1E87;text-decoration:none">Esqueceu a senha?</a>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:12px">
+          <button class="btn" onclick="login()">Entrar</button>
+          <button class="btn secondary" onclick="document.getElementById('email').value='admin@bwcomp.com';document.getElementById('senha').value='123456'">Demo</button>
+        </div>
+        <div id="msg" class="small" style="color:#b91c1c;margin-top:8px;display:none"></div>
+        <div class="small" style="margin-top:12px;color:#5b6b8f">© MAV‑IT Tecnologia em IA para Segurança de Portos e Embarcações</div>
+      </div>
+    </div>
+  </section>
+<script>
+const usuarios = [
+  { email: "admin@bwcomp.com", senha: "123456" },
+  { email: "user@bwcomp.com", senha: "senha123" }
+];
+function login(){
+  const email = document.getElementById('email').value.trim();
+  const senha = document.getElementById('senha').value.trim();
+  const ok = usuarios.find(u => u.email===email && u.senha===senha);
+  if(ok){
+    localStorage.setItem('usuarioLogado', email);
+    if(document.getElementById('lembrar').checked){ localStorage.setItem('lembrar', '1'); }
+    window.location.href='dashboard.html';
+  } else {
+    const m = document.getElementById('msg');
+    m.style.display='block';
+    m.textContent='Usuário ou senha inválidos.';
+  }
+}
+</script>
+
+    <!-- DB on GitHub -->
+    <script src="db/config.js"></script>
+    <script src="db/db.js"></script>
+
+</body>
+</html>

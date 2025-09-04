@@ -1,0 +1,237 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard • Água de Lastro • MAV-IT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.111/pdf.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.111/pdf.worker.min.js"></script>
+</head>
+<body>
+  <header class="header" style="background:#fff;box-shadow:0 6px 20px rgba(28,30,135,.08)">
+    <div class="brand"><div class="logoDot"></div><div class="brandText">MAV‑IT • BW COMP</div></div>
+    <nav style="display:flex;gap:14px;align-items:center">
+      <a href="meus-atestados.html" class="small" style="text-decoration:none;color:#1C1E87;font-weight:800">Meus Atestados</a>
+      <a href="index.html" class="small" style="text-decoration:none;color:#5b6b8f" onclick="localStorage.removeItem('usuarioLogado')">Sair</a>
+    </nav>
+  </header>
+  <main class="container">
+    <section class="grid cols-2">
+      <div class="card">
+        <h2 class="section-title">Dados do Navio</h2>
+        <div class="sub">Preencha os campos obrigatórios.</div>
+        <div class="field-row"><div class="lab">Embarcação</div><input class="input" id="nome_embarcacao"></div>
+        <div class="field-row"><div class="lab">IMO</div><input class="input" id="imo"></div>
+        <div class="field-row"><div class="lab">Porto de chegada</div><input class="input" id="porto_chegada"></div>
+        <div class="field-row"><div class="lab">Data de chegada</div><input class="input" id="data_chegada" type="date"></div>
+        <div class="grid cols-2" style="margin-top:6px">
+          <div class="field-row"><div class="lab">Bordo (m³)</div><input class="input" id="volume_bordo" type="number"></div>
+          <div class="field-row"><div class="lab">Descarga (m³)</div><input class="input" id="volume_descarga" type="number"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">Uploads obrigatórios</h2>
+        <div class="sub">Selecione os <b>4 PDFs</b> exatamente nos modelos fornecidos.</div>
+        <div class="field-row"><div class="lab">1.1 — IBWMC</div><input class="input" id="file_ibwmc" type="file" accept="application/pdf"></div>
+        <div class="small" style="margin:-6px 0 6px 180px">International Ballast Water Management Certificate – Certificado Internacional conforme Convenção BWM.</div>
+        <div class="field-row"><div class="lab">1.2 — IBWMS</div><input class="input" id="file_ibwms" type="file" accept="application/pdf"></div>
+        <div class="small" style="margin:-6px 0 6px 180px">Certificação do Sistema de Gestão de Água de Lastro (BWMS) – Type Approval/Declaração (ex.: IMO/USCG).</div>
+        <div class="field-row"><div class="lab">1.3 — BWRF</div><input class="input" id="file_bwrf" type="file" accept="application/pdf"></div>
+        <div class="small" style="margin:-6px 0 6px 180px">Ballast Water Report Form – Formulário NORMAM‑20/DPC.</div>
+        <div class="field-row"><div class="lab">1.4 — IBWMP</div><input class="input" id="file_ibwmp" type="file" accept="application/pdf"></div>
+        <div class="small" style="margin:-6px 0 0 180px">Ballast Water Management Plan – Plano aprovado da embarcação.</div>
+
+        <div class="progress" style="margin-top:10px"><div id="progbar"></div></div>
+        <div id="status" class="small" style="margin-top:6px"></div>
+        <div style="display:flex;gap:10px;margin-top:12px">
+          <button class="btn" onclick="processar()">Validar & Gerar</button>
+          <button class="btn secondary" onclick="limpar()">Limpar</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid cols-3" style="margin-top:18px">
+      <div class="card">
+        <h2 class="section-title">Resumo IBWMC</h2>
+        <table class="table" id="tb_ibwmc"><tr><th>Campo</th><th>Valor</th></tr></table>
+      </div>
+      <div class="card">
+        <h2 class="section-title">Resumo IBWMS</h2>
+        <table class="table" id="tb_ibwms"><tr><th>Campo</th><th>Valor</th></tr></table>
+      </div>
+      <div class="card">
+        <h2 class="section-title">Resumo Report/IBWMP</h2>
+        <table class="table" id="tb_bwrf"><tr><th>Campo</th><th>Valor</th></tr></table>
+      </div>
+    </section>
+  </main>
+
+<script>
+if(!localStorage.getItem('usuarioLogado')) window.location.href='index.html';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.111/pdf.worker.min.js';
+function setProgress(p){ document.getElementById('progbar').style.width = p+'%'; }
+
+function readPdfFile(file){
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = async () => {
+      try {
+        const typed = new Uint8Array(fr.result);
+        const pdf = await pdfjsLib.getDocument({data:typed}).promise;
+        let fullText = "";
+        for(let i=1;i<=pdf.numPages;i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const strings = content.items.map(it => it.str);
+          fullText += strings.join("\n") + "\n";
+        }
+        resolve(fullText);
+      } catch(err){ reject(err); }
+    };
+    fr.onerror = reject;
+    fr.readAsArrayBuffer(file);
+  });
+}
+
+function parseIBWMC(text){
+  const pick = (re) => (text.match(re)||[])[1]?.trim() || null;
+  return {
+    source:'IBWMC',
+    shipName: pick(/Name of ship\s+(.+?)\n/i),
+    imo: pick(/IMO\s*number.*?(\d{7})/i),
+    port: pick(/Port of registry\s+(.+?)\n/i),
+    gt: pick(/Gross\s*Tonnage\s+([\d\.,]+)/i),
+    method: /D-2|Regulation\s*D-2/i.test(text) ? 'D-2' : (/D-1|Regulation\s*D-1/i.test(text) ? 'D-1':'N/A'),
+    manufacturer: pick(/Name of manufacturer.*?\n(.+?)\n/i) || (text.match(/Headway|Alfa Laval|DESMI|Ecochlor/i)?.[0]||null),
+    installDate: pick(/Date installed.*?([0-9]{1,2}\s*\w+\s*[0-9]{4}|[0-9]{2}[\/\.][0-9]{2}[\/\.][0-9]{4})/i),
+    validUntil: pick(/valid\s*until\s*([A-Za-z0-9 ,\/]+)/i)
+  };
+}
+function parseIBWMS(text){
+  const pick = (re) => (text.match(re)||[])[1]?.trim() || null;
+  return {
+    source:'IBWMS',
+    approval: pick(/Approval\s*Number[:\s]+([\d\.\/]+)/i),
+    expires: pick(/Expires[:\s]+(.+?)\n/i),
+    bwmsName: pick(/Name of BWMS[:\s]+(.+?)\n/i) || (text.match(/OceanGuard|Hyde Guardian|BWTS/i)?.[0]||null),
+    manufacturer: (text.match(/Headway Technology Group|Alfa Laval|DESMI|Ecochlor/i)?.[0]||null),
+    capacities: pick(/Capacities[:\s]+(.+?)\n/i)
+  };
+}
+function parseBWRF(text){
+  const pick = (re) => (text.match(re)||[])[1]?.trim() || null;
+  return {
+    source:'BWRF',
+    shipName: pick(/Vessel\s*Name[:\s]+(.+?)\n/i),
+    arrivalPort: pick(/Arrival\s*Port[:\s]+(.+?)\n/i),
+    arrivalDate: pick(/Arrival\s*Date.*?[:\s]+(.+?)\n/i),
+    totalOnBoard: pick(/Total\s*ballast\s*water\s*on\s*board.*?([\d\.,]+)/i),
+    totalToDischarge: pick(/Total\s*ballast\s*water\s*to\s*be\s*discharged.*?([\d\.,]+)/i),
+    bwmsUsed: /\)\s*BWMS\s*\)|\(\s*√\s*\)\s*BWMS|BWMS\s+YES/i.test(text) ? 'YES' : ( /BWE/i.test(text) ? 'BWE':'N/A')
+  };
+}
+function parseIBWMP(text){
+  const pick = (re) => (text.match(re)||[])[1]?.trim() || null;
+  return {
+    source:'IBWMP',
+    shipName: pick(/Ship[’'`s]*\s*name.*?\n\s*(.+?)\n/i),
+    flag: pick(/Flag\s+(.+?)\n/i),
+    methodPrimary: /D-2/i.test(text) ? 'D-2' : null,
+    methodContingency: /D-1/i.test(text) ? 'D-1' : null,
+    officer: pick(/Ballast\s*Water\s*Management\s*Officer.*?\n\s*(.+?)\n/i)
+  };
+}
+function compareAll(inputs, docs){
+  const findings = [];
+  function add(field, label, values, labels){
+    const vals = values.filter(v=>v!=null).map(v=>v.toString().trim());
+    const uniq = Array.from(new Set(vals));
+    const match = uniq.length<=1 && vals.length>0;
+    findings.push({field,label,values:vals,match,labels});
+  }
+  add('shipName','Nome da embarcação',[inputs.nome_embarcacao, docs.IBWMC?.shipName, docs.BWRF?.shipName, docs.IBWMP?.shipName],['Digitado','IBWMC','BWRF','IBWMP']);
+  add('imo','IMO',[inputs.imo, docs.IBWMC?.imo],['Digitado','IBWMC']);
+  add('arrivalPort','Porto de chegada',[inputs.porto_chegada, docs.BWRF?.arrivalPort],['Digitado','BWRF']);
+  add('arrivalDate','Data de chegada',[inputs.data_chegada, docs.BWRF?.arrivalDate],['Digitado','BWRF']);
+  add('totalOnBoard','Volume a bordo (m³)',[inputs.volume_bordo, docs.BWRF?.totalOnBoard],['Digitado','BWRF']);
+  add('totalToDischarge','Volume a descarregar (m³)',[inputs.volume_descarga, docs.BWRF?.totalToDischarge],['Digitado','BWRF']);
+  add('method','Método (D-1/D-2)',[docs.IBWMC?.method, docs.IBWMP?.methodPrimary],['IBWMC','IBWMP']);
+  add('manufacturer','Fabricante do BWMS',[docs.IBWMC?.manufacturer, docs.IBWMS?.manufacturer],['IBWMC','IBWMS']);
+  add('bwmsName','Sistema BWMS',[docs.IBWMS?.bwmsName],['IBWMS']);
+  add('approval','USCG Approval',[docs.IBWMS?.approval],['IBWMS']);
+  add('validUntil','IBWMC validade',[docs.IBWMC?.validUntil],['IBWMC']);
+  return findings;
+}
+function setTable(tbId, pairs){
+  const tb = document.getElementById(tbId);
+  pairs.forEach(([k,v])=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${k}</td><td>${v||'-'}</td>`;
+    tb.appendChild(tr);
+  });
+}
+async function processar(){
+  const required=['nome_embarcacao','imo','porto_chegada','data_chegada','volume_bordo','volume_descarga','file_ibwmc','file_ibwms','file_bwrf','file_ibwmp'];
+  for(const id of required){
+    const el=document.getElementById(id);
+    if(!el || (el.type!=='file' && !el.value) || (el.type==='file' && !el.files[0])){ 
+      document.getElementById('status').textContent='Preencha todos os campos e selecione os 4 PDFs.'; 
+      return; 
+    }
+  }
+  setProgress(5);
+  document.getElementById('status').textContent='Validando…';
+  try {
+    const [t1,t2,t3,t4] = await Promise.all([
+      readPdfFile(document.getElementById('file_ibwmc').files[0]),
+      readPdfFile(document.getElementById('file_ibwms').files[0]),
+      readPdfFile(document.getElementById('file_bwrf').files[0]),
+      readPdfFile(document.getElementById('file_ibwmp').files[0])
+    ]);
+    setProgress(60);
+    const d1=parseIBWMC(t1), d2=parseIBWMS(t2), d3=parseBWRF(t3), d4=parseIBWMP(t4);
+    const inputs={
+      nome_embarcacao: document.getElementById('nome_embarcacao').value.trim(),
+      imo: document.getElementById('imo').value.trim(),
+      porto_chegada: document.getElementById('porto_chegada').value.trim(),
+      data_chegada: document.getElementById('data_chegada').value.trim(),
+      volume_bordo: document.getElementById('volume_bordo').value.trim(),
+      volume_descarga: document.getElementById('volume_descarga').value.trim()
+    };
+    const docs={ IBWMC:d1, IBWMS:d2, BWRF:d3, IBWMP:d4 };
+    const findings=compareAll(inputs,docs);
+    setProgress(90);
+    localStorage.setItem('bw_inputs', JSON.stringify(inputs));
+    localStorage.setItem('bw_docs', JSON.stringify(docs));
+    localStorage.setItem('bw_findings', JSON.stringify(findings));
+    // Fill summaries
+    setTable('tb_ibwmc',[['Ship',d1.shipName],['IMO',d1.imo],['Porto',d1.port],['Método',d1.method],['Fabricante',d1.manufacturer],['Validade',d1.validUntil]]);
+    setTable('tb_ibwms',[['Sistema',d2.bwmsName],['Approval',d2.approval],['Expira',d2.expires],['Fabricante',d2.manufacturer],['Capacidades',d2.capacities]]);
+    setTable('tb_bwrf',[['Vessel',d3.shipName],['Chegada',d3.arrivalPort],['Data',d3.arrivalDate],['Bordo (m³)',d3.totalOnBoard],['Descarga (m³)',d3.totalToDischarge],['BWMS usado',d3.bwmsUsed]]);
+    setProgress(100);
+    window.location.href='termo-final.html';
+  } catch(err){
+    document.getElementById('status').textContent='Falha na leitura de algum PDF.';
+  }
+}
+function limpar(){
+  localStorage.removeItem('bw_inputs');
+  localStorage.removeItem('bw_docs');
+  localStorage.removeItem('bw_findings');
+  document.getElementById('status').textContent='';
+  setProgress(0);
+}
+</script>
+
+    <!-- DB on GitHub -->
+    <script src="db/config.js"></script>
+    <script src="db/db.js"></script>
+
+</body>
+</html>

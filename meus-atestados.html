@@ -1,0 +1,138 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meus Atestados • Água de Lastro • MAV-IT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header" style="background:#fff;box-shadow:0 6px 20px rgba(28,30,135,.08)">
+    <div class="brand"><div class="logoDot"></div><div class="brandText">MAV‑IT • BW COMP</div></div>
+    <nav style="display:flex;gap:14px;align-items:center">
+      <a href="dashboard.html" class="small" style="text-decoration:none;color:#1C1E87;font-weight:800">Novo Atestado</a>
+      <a href="index.html" class="small" style="text-decoration:none;color:#5b6b8f" onclick="localStorage.removeItem('usuarioLogado')">Sair</a>
+    
+      <button class="btn secondary" id="btnLoadGh">Carregar do GitHub</button>
+      <small style="opacity:.7">Repo: <code><span id="cfgRepo"></span></code></small>
+    </nav>
+  </header>
+  <main class="container">
+    <div class="card">
+      <h2 class="section-title">Meus Atestados de Conformidade</h2>
+      <div class="sub">Listagem dos atestados emitidos pelo seu usuário. Clique em <b>Ver</b> para abrir e gerar o PDF novamente.</div>
+      <table class="table" id="tb_list">
+        <tr><th>Data/Hora</th><th>Embarcação</th><th>IMO</th><th>Porto</th><th>Status</th><th>Hash</th><th>Ações</th></tr>
+      </table>
+    </div>
+  </main>
+<script>
+function currentUser(){ return localStorage.getItem('usuarioLogado')||'anon'; }
+if(!localStorage.getItem('usuarioLogado')) window.location.href='index.html';
+
+function load(){
+  const key = 'atestados_'+currentUser();
+  const arr = JSON.parse(localStorage.getItem(key)||'[]');
+  const tb = document.getElementById('tb_list');
+  if(arr.length===0){
+    const tr=document.createElement('tr');
+    tr.innerHTML = '<td colspan="7" class="small">Nenhum atestado encontrado.</td>';
+    tb.appendChild(tr);
+    return;
+  }
+  arr.forEach((item, idx)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${item.ts}</td>
+      <td>${item.ship||'-'}</td>
+      <td>${item.imo||'-'}</td>
+      <td>${item.port||'-'}</td>
+      <td>${item.approved?'<span class="badge ok">APROVADO</span>':'<span class="badge error">REPROVADO</span>'}</td>
+      <td><code>${(item.hash||'').slice(0,12)}...</code></td>
+      <td><button class="btn" data-idx="${idx}">Ver</button></td>`;
+    tb.appendChild(tr);
+  });
+  tb.addEventListener('click', (e)=>{
+    if(e.target.matches('button[data-idx]')){
+      const idx = parseInt(e.target.getAttribute('data-idx'));
+      const key = 'atestados_'+currentUser();
+      const arr = JSON.parse(localStorage.getItem(key)||'[]');
+      const snap = arr[idx]?.snapshot;
+      if(snap){
+        localStorage.setItem('bw_snapshot', JSON.stringify(snap));
+        window.location.href='termo-final.html';
+      }
+    }
+  });
+}
+
+load();
+
+async function loadFromGitHub(){
+  const repo = `${window.DB_GH_REPO_OWNER||'-'}/${window.DB_GH_REPO_NAME||'-'}@${window.DB_GH_BRANCH||'-'}`;
+  document.getElementById('cfgRepo').textContent = repo;
+  try{
+    if(!window.listGitHubRecords) throw new Error("listGitHubRecords não está carregado");
+    const itens = await window.listGitHubRecords(50);
+    // Renderiza tabela com itens
+    const tb = document.querySelector('#tbAtestados tbody');
+    tb.innerHTML = '';
+    itens.forEach((it, idx)=>{
+      const d = it.data || {};
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${d.ts_local || '-'}</td>
+        <td>${d.navio || '-'}</td>
+        <td>${d.imo || '-'}</td>
+        <td>${d.porto_destino || '-'}</td>
+        <td>${d.status_atestado==='ATESTADO_DE_CONFORMIDADE'
+          ? '<span class="badge ok">APROVADO</span>'
+          : '<span class="badge error">REPROVADO</span>'}</td>
+        <td><code>${(d.pdf_hash_sha256||'').slice(0,12)}...</code></td>
+        <td><button class="btn" data-idx="${idx}" data-src="gh">Ver</button></td>`;
+      tb.appendChild(tr);
+    });
+    // Click handler para Ver
+    tb.addEventListener('click', (e)=>{
+      if(e.target.matches('button[data-src="gh"]')){
+        const idx = parseInt(e.target.getAttribute('data-idx'),10);
+        const it = itens[idx];
+        // Guarda snapshot e abre termo-final com restore
+        localStorage.setItem('bw_snapshot', JSON.stringify({
+          inputs: it.data, // compat: no termo usamos inputs/docs/findings; aqui empacotamos tudo em inputs
+          docs: it.data.docs || {},
+          findings: it.data.nao_conformes || [],
+          ts: it.data.ts_local || '',
+          approved: it.data.status_atestado === 'ATESTADO_DE_CONFORMIDADE',
+          hash: it.data.pdf_hash_sha256 || ''
+        }));
+        window.location.href='termo-final.html';
+      }
+    }, { once: true });
+  }catch(e){
+    alert("Falha ao ler do GitHub: " + e.message);
+    console.error(e);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  const btn = document.getElementById('btnLoadGh');
+  if (btn) btn.addEventListener('click', loadFromGitHub);
+  const repo = `${window.DB_GH_REPO_OWNER||'-'}/${window.DB_GH_REPO_NAME||'-'}@${window.DB_GH_BRANCH||'-'}`;
+  const el = document.getElementById('cfgRepo');
+  if (el) el.textContent = repo;
+});
+
+</script>
+
+    <!-- DB on GitHub -->
+    <script src="db/config.js"></script>
+    <script src="db/read.js"></script>
+    <script src="db/db.js"></script>
+
+</body>
+</html>
