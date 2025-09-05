@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Suporte Técnico • Água de Lastro • MAV-IT</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page-wrapper">
+    <aside class="sidebar">
+      <div class="brand"><div class="logoDot"></div><div class="brandText">MAV‑IT • BW COMP</div></div>
+      <nav class="sidebar-nav">
+        <a href="dashboard.html" class="nav-item">Novo Atestado</a>
+        <a href="minhas-requisicoes.html" class="nav-item">Minhas Requisições</a>
+        <a href="meus-atestados.html" class="nav-item">Meus Atestados</a>
+        <a href="arquivados.html" class="nav-item">Arquivados</a>
+        <a href="cadastro-usuarios.html" class="nav-item">Cadastro de Usuários</a>
+        <a href="financeiro.html" class="nav-item">Financeiro</a>
+        <a href="suporte.html" class="nav-item active">Suporte Técnico</a>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="index.html" onclick="localStorage.removeItem('usuarioLogado')">Sair</a>
+      </div>
+    </aside>
+    <main class="main-content">
+      <div class="container">
+        <div class="card">
+          <h2 class="section-title">Abrir Ticket de Suporte</h2>
+          <div class="sub">Informe os detalhes do seu problema e nossa equipe responderá em breve.</div>
+          
+          <div class="grid cols-2" style="gap: 12px;">
+            <input class="input" id="t_nome" placeholder="Seu Nome">
+            <input class="input" id="t_telefone" placeholder="Telefone de Contato">
+            <input class="input" id="t_email" placeholder="Seu E-mail">
+            <input class="input" type="file" id="t_anexo">
+          </div>
+          <textarea class="input" id="t_mensagem" placeholder="Descreva seu problema aqui..." style="margin-top: 12px; min-height: 100px;"></textarea>
+          
+          <div style="margin-top: 12px;">
+            <button class="btn" onclick="abrirTicket()">Enviar Ticket</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 18px;">
+          <h2 class="section-title">Tickets Abertos (Visão MAV-IT)</h2>
+          <div class="sub">Esta seção simula a visualização e resposta dos tickets pela equipe de suporte.</div>
+          <div id="ticket_list">
+            </div>
+        </div>
+      </div>
+    </main>
+  </div>
+<script>
+// --- INÍCIO DO BLOCO DE UTILIDADES ---
+if(!localStorage.getItem('usuarioLogado')) window.location.href='index.html';
+function currentUser(){ return localStorage.getItem('usuarioLogado')||'anon'; }
+function getDb(){
+  const key = 'mav_it_data_' + currentUser();
+  const defaults = { requisicoes: [], atestados: [], arquivados: [], usuarios: [], faturamento: {}, tickets: [] };
+  try {
+    const db = JSON.parse(localStorage.getItem(key));
+    if (!db.tickets) {
+      db.tickets = [];
+    }
+    return db || defaults;
+  } catch(e) { return defaults; }
+}
+function saveDb(db){
+  const key = 'mav_it_data_' + currentUser();
+  localStorage.setItem(key, JSON.stringify(db));
+}
+// --- FIM DO BLOCO DE UTILIDADES ---
+
+function abrirTicket() {
+  const nome = document.getElementById('t_nome').value.trim();
+  const telefone = document.getElementById('t_telefone').value.trim();
+  const email = document.getElementById('t_email').value.trim();
+  const mensagem = document.getElementById('t_mensagem').value.trim();
+  const anexoInput = document.getElementById('t_anexo');
+  const anexo = anexoInput.files.length > 0 ? anexoInput.files[0].name : null;
+
+  if (!nome || !email || !mensagem) {
+    alert('Por favor, preencha Nome, E-mail e Mensagem.');
+    return;
+  }
+
+  const newTicket = {
+    id: 'ticket_' + Date.now(),
+    nome, telefone, email, mensagem, anexo,
+    ts: new Date().toLocaleString(),
+    status: 'Aberto',
+    respostas: []
+  };
+
+  const db = getDb();
+  db.tickets.unshift(newTicket);
+  saveDb(db);
+
+  // Simulação do envio de e-mail
+  alert(`Ticket aberto com sucesso!\n\nUma notificação foi enviada para comercial@mav-it.com.\nID do Ticket: ${newTicket.id}`);
+
+  // Limpar formulário
+  document.getElementById('t_nome').value = '';
+  document.getElementById('t_telefone').value = '';
+  document.getElementById('t_email').value = '';
+  document.getElementById('t_mensagem').value = '';
+  anexoInput.value = '';
+
+  renderTickets();
+}
+
+function responderTicket(ticketId) {
+  const respostaText = document.getElementById(`resposta_${ticketId}`).value.trim();
+  if (!respostaText) {
+    alert('A resposta não pode estar vazia.');
+    return;
+  }
+
+  const db = getDb();
+  const ticket = db.tickets.find(t => t.id === ticketId);
+
+  if (ticket) {
+    ticket.respostas.push({
+      autor: 'MAV-IT Suporte',
+      texto: respostaText,
+      ts: new Date().toLocaleString()
+    });
+    ticket.status = 'Respondido';
+    saveDb(db);
+    renderTickets();
+  }
+}
+
+function renderTickets() {
+  const db = getDb();
+  const listContainer = document.getElementById('ticket_list');
+  listContainer.innerHTML = '';
+
+  if (db.tickets.length === 0) {
+    listContainer.innerHTML = '<p class="small">Nenhum ticket aberto no momento.</p>';
+    return;
+  }
+
+  db.tickets.forEach(ticket => {
+    const statusClass = ticket.status === 'Aberto' ? 'error' : 'ok';
+    let respostasHtml = ticket.respostas.map(r => `
+      <div style="background: #eef2ff; padding: 8px; border-radius: 8px; margin-top: 8px;">
+        <p class="small" style="margin:0;"><b>${r.autor}</b> (${r.ts}):<br>${r.texto}</p>
+      </div>
+    `).join('');
+
+    const ticketElement = document.createElement('div');
+    ticketElement.style.border = '1px solid #eef2ff';
+    ticketElement.style.borderRadius = '12px';
+    ticketElement.style.padding = '15px';
+    ticketElement.style.marginBottom = '15px';
+    
+    ticketElement.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="margin:0; font-size: 16px;">Ticket: ${ticket.id}</h3>
+        <span class="badge ${statusClass}">${ticket.status}</span>
+      </div>
+      <p class="small" style="margin: 4px 0;"><b>De:</b> ${ticket.nome} (${ticket.email}) - <b>Em:</b> ${ticket.ts}</p>
+      <p style="background: #f6f8fc; padding: 10px; border-radius: 8px; margin: 10px 0;">${ticket.mensagem}</p>
+      ${ticket.anexo ? `<p class="small"><b>Anexo:</b> ${ticket.anexo}</p>` : ''}
+      
+      <div class="respostas-container">
+        ${respostasHtml}
+      </div>
+
+      <div class="responder-form" style="margin-top: 15px;">
+        <textarea class="input" id="resposta_${ticket.id}" placeholder="Escreva a resposta do suporte aqui..."></textarea>
+        <button class="btn" style="margin-top: 8px;" onclick="responderTicket('${ticket.id}')">Responder</button>
+      </div>
+    `;
+    listContainer.appendChild(ticketElement);
+  });
+}
+
+// Carrega os tickets quando a página é aberta
+renderTickets();
+</script>
+</body>
+</html>

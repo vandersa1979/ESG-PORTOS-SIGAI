@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cadastro de Usuários • Água de Lastro • MAV-IT</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page-wrapper">
+    <aside class="sidebar">
+      <div class="brand"><div class="logoDot"></div><div class="brandText">MAV‑IT • BW COMP</div></div>
+      <nav class="sidebar-nav">
+        <a href="dashboard.html" class="nav-item">Novo Atestado</a>
+        <a href="minhas-requisicoes.html" class="nav-item">Minhas Requisições</a>
+        <a href="meus-atestados.html" class="nav-item">Meus Atestados</a>
+        <a href="arquivados.html" class="nav-item">Arquivados</a>
+        <a href="cadastro-usuarios.html" class="nav-item active">Cadastro de Usuários</a>
+        <a href="financeiro.html" class="nav-item">Financeiro</a>
+        <a href="suporte.html" class="nav-item">Suporte Técnico</a>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="index.html" onclick="localStorage.clear()">Sair</a>
+      </div>
+    </aside>
+    <main class="main-content">
+      <div class="container">
+        <div class="card">
+          <div style="display:flex; justify-content: space-between; align-items: center;">
+            <h2 class="section-title">Usuários da Empresa</h2>
+            <button class="btn" id="btnNovoUsuario">Novo Usuário</button>
+          </div>
+          <div class="sub">Adicione e gerencie usuários associados à sua conta. Eles poderão acessar o sistema com o e-mail e senha definidos.</div>
+          
+          <div id="formNovoUsuario" style="display:none; margin-top: 20px; background: #f6f8fc; padding: 15px; border-radius: 12px;">
+            <h3 class="section-title">Adicionar Novo Usuário</h3>
+            <div class="grid cols-2">
+              <input class="input" id="user_nome" placeholder="Nome Completo">
+              <input class="input" id="user_cpf" placeholder="CPF">
+              <input class="input" id="user_contato" placeholder="Contato (Telefone)">
+              <input class="input" type="email" id="user_email" placeholder="E-mail (Login de Acesso)">
+              <input class="input" type="password" id="user_senha" placeholder="Senha de Acesso">
+            </div>
+            <div style="display:flex; gap:10px; margin-top:12px">
+              <button class="btn" id="btnSalvarUsuario">Salvar</button>
+              <button class="btn secondary" id="btnCancelarUsuario">Cancelar</button>
+            </div>
+          </div>
+
+          <table class="table" style="margin-top: 20px;">
+            <thead><tr><th>Ação</th><th>Nome</th><th>CPF</th><th>Contato</th><th>Email (Login)</th><th>Status</th></tr></thead>
+            <tbody id="tb_users"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+<script>
+// --- INÍCIO DO BLOCO DE UTILIDADES ---
+if(!localStorage.getItem('usuarioLogado')) window.location.href='index.html';
+
+function getAccountEmail() {
+  return localStorage.getItem('contaPrincipal') || localStorage.getItem('usuarioLogado') || 'anon';
+}
+
+function getDb(){
+  const key = 'mav_it_data_' + getAccountEmail();
+  const defaults = { requisicoes: [], atestados: [], arquivados: [], usuarios: [], faturamento: {}, tickets: [] };
+  try {
+    const db = JSON.parse(localStorage.getItem(key));
+    if (!db) return defaults;
+    // Garante que chaves existam para evitar erros
+    for(const k in defaults) { if(!db[k]) db[k] = defaults[k]; }
+    return db;
+  } catch(e) { return defaults; }
+}
+function saveDb(db){
+  const key = 'mav_it_data_' + getAccountEmail();
+  localStorage.setItem(key, JSON.stringify(db));
+}
+// --- FIM DO BLOCO DE UTILIDADES ---
+
+const form = document.getElementById('formNovoUsuario');
+const btnNovo = document.getElementById('btnNovoUsuario');
+const btnSalvar = document.getElementById('btnSalvarUsuario');
+const btnCancelar = document.getElementById('btnCancelarUsuario');
+
+btnNovo.addEventListener('click', () => { form.style.display = 'block'; });
+btnCancelar.addEventListener('click', () => { form.style.display = 'none'; });
+
+btnSalvar.addEventListener('click', () => {
+  const nome = document.getElementById('user_nome').value.trim();
+  const cpf = document.getElementById('user_cpf').value.trim();
+  const contato = document.getElementById('user_contato').value.trim();
+  const email = document.getElementById('user_email').value.trim();
+  const senha = document.getElementById('user_senha').value.trim();
+
+  if(!nome || !email || !senha) {
+    alert('Nome, E-mail e Senha são obrigatórios.');
+    return;
+  }
+
+  const newUser = { id: 'user_' + Date.now(), nome, cpf, contato, email, senha, status: 'Ativo' };
+  
+  const db = getDb();
+  db.usuarios.push(newUser);
+  saveDb(db);
+  
+  // Limpar e fechar form
+  document.getElementById('user_nome').value = '';
+  document.getElementById('user_cpf').value = '';
+  document.getElementById('user_contato').value = '';
+  document.getElementById('user_email').value = '';
+  document.getElementById('user_senha').value = '';
+  form.style.display = 'none';
+
+  renderTable();
+});
+
+function renderTable(){
+  const db = getDb();
+  const tbody = document.getElementById('tb_users');
+  tbody.innerHTML = '';
+
+  if(db.usuarios.length === 0){
+    tbody.innerHTML = '<tr><td colspan="6" class="small">Nenhum usuário cadastrado.</td></tr>';
+    return;
+  }
+
+  db.usuarios.forEach((user, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="actions"><button class="btn secondary small-btn" data-idx="${idx}">Desativar</button></td>
+      <td>${user.nome}</td>
+      <td>${user.cpf}</td>
+      <td>${user.contato}</td>
+      <td>${user.email}</td>
+      <td><span class="badge ${user.status === 'Ativo' ? 'ok' : 'error'}">${user.status}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+renderTable();
+</script>
+</body>
+</html>

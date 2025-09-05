@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -18,8 +17,7 @@
     <div class="hero-inner">
       <div class="hero-copy">
         <h1>Água de Lastro • Portos Ambientalmente Seguros</h1>
-        <p>Emita o <b>ATESTADO DE CONFORMIDADE</b> com verificação automática entre IBWMC, IBWMS, Report Form e IBWMP.
-        Solução MAV‑IT com foco em <b>ESG</b>, IA e governança portuária.</p>
+        <p>Emita o <b>ATESTADO DE CONFORMIDADE</b> com verificação automática entre IBWMC, IBWMS, Report Form e IBWMP. Solução MAV‑IT com foco em <b>ESG</b>, IA e governança portuária.</p>
       </div>
       <div class="login-card">
         <div class="label">E‑mail</div>
@@ -32,7 +30,7 @@
         </div>
         <div style="display:flex;gap:10px;margin-top:12px">
           <button class="btn" onclick="login()">Entrar</button>
-          <button class="btn secondary" onclick="document.getElementById('email').value='admin@bwcomp.com';document.getElementById('senha').value='123456'">Demo</button>
+          <button class="btn secondary" onclick="document.getElementById('email').value='vander@mav-it.com';document.getElementById('senha').value='vander123'">Demo</button>
         </div>
         <div id="msg" class="small" style="color:#b91c1c;margin-top:8px;display:none"></div>
         <div class="small" style="margin-top:12px;color:#5b6b8f">© MAV‑IT Tecnologia em IA para Segurança de Portos e Embarcações</div>
@@ -40,29 +38,55 @@
     </div>
   </section>
 <script>
-const usuarios = [
-  { email: "admin@bwcomp.com", senha: "123456" },
-  { email: "user@bwcomp.com", senha: "senha123" }
+// Lista de administradores principais
+const adminUsers = [
+  { email: "vander@mav-it.com", senha: "vander123" },
+  { email: "marcos@mav-it.com", senha: "marcos123" }
 ];
+
 function login(){
   const email = document.getElementById('email').value.trim();
   const senha = document.getElementById('senha').value.trim();
-  const ok = usuarios.find(u => u.email===email && u.senha===senha);
-  if(ok){
+  localStorage.clear(); // Limpa sessão anterior ao tentar novo login
+
+  // 1. Verifica se é um administrador principal
+  const admin = adminUsers.find(u => u.email === email && u.senha === senha);
+  if (admin) {
     localStorage.setItem('usuarioLogado', email);
-    if(document.getElementById('lembrar').checked){ localStorage.setItem('lembrar', '1'); }
-    window.location.href='dashboard.html';
-  } else {
-    const m = document.getElementById('msg');
-    m.style.display='block';
-    m.textContent='Usuário ou senha inválidos.';
+    if(document.getElementById('lembrar').checked) localStorage.setItem('lembrar', '1');
+    window.location.href = 'dashboard.html';
+    return;
   }
+
+  // 2. Se não for admin, procura como sub-usuário em todas as contas
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key.startsWith('mav_it_data_')) {
+      try {
+        const db = JSON.parse(localStorage.getItem(key));
+        if (db && db.usuarios) {
+          const subUsuario = db.usuarios.find(u => u.email === email && u.senha === senha);
+          if (subUsuario) {
+            const contaPrincipalEmail = key.replace('mav_it_data_', '');
+            localStorage.setItem('usuarioLogado', email); // Quem está logado
+            localStorage.setItem('contaPrincipal', contaPrincipalEmail); // A qual conta pertence
+            if(document.getElementById('lembrar').checked) localStorage.setItem('lembrar', '1');
+            window.location.href = 'dashboard.html';
+            return;
+          }
+        }
+      } catch (e) {
+        // Ignora chaves de localStorage malformadas
+        console.warn('Could not parse localStorage key:', key);
+      }
+    }
+  }
+
+  // 3. Se não encontrou ninguém
+  const m = document.getElementById('msg');
+  m.style.display = 'block';
+  m.textContent = 'Usuário ou senha inválidos.';
 }
 </script>
-
-    <!-- DB on GitHub -->
-    <script src="db/config.js"></script>
-    <script src="db/db.js"></script>
-
 </body>
 </html>

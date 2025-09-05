@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Meus Atestados • Água de Lastro • MAV-IT</title>
+<title>Minhas Requisições • Água de Lastro • MAV-IT</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -12,8 +12,8 @@
       <div class="brand"><div class="logoDot"></div><div class="brandText">MAV‑IT • BW COMP</div></div>
       <nav class="sidebar-nav">
         <a href="dashboard.html" class="nav-item">Novo Atestado</a>
-        <a href="minhas-requisicoes.html" class="nav-item">Minhas Requisições</a>
-        <a href="meus-atestados.html" class="nav-item active">Meus Atestados</a>
+        <a href="minhas-requisicoes.html" class="nav-item active">Minhas Requisições</a>
+        <a href="meus-atestados.html" class="nav-item">Meus Atestados</a>
         <a href="arquivados.html" class="nav-item">Arquivados</a>
         <a href="cadastro-usuarios.html" class="nav-item">Cadastro de Usuários</a>
         <a href="financeiro.html" class="nav-item">Financeiro</a>
@@ -26,10 +26,10 @@
     <main class="main-content">
       <div class="container">
         <div class="card">
-          <h2 class="section-title">Meus Atestados de Conformidade</h2>
-          <div class="sub">Listagem dos atestados finalizados (aceitos) pelo seu usuário.</div>
+          <h2 class="section-title">Minhas Requisições</h2>
+          <div class="sub">Requisições aguardando ação. Após reprovado, você pode solicitar reanálise (simulado), aceitar o atestado como está, ou arquivá-lo.</div>
           <table class="table" id="tb_list">
-            <thead><tr><th>Ação</th><th>Porto</th><th>Nome da Embarcação</th><th>Número IMO</th><th>Resultado</th><th>Data da Liberação</th></tr></thead>
+            <thead><tr><th>Ação</th><th>Porto</th><th>Tipo</th><th>Declaração</th><th>IMO</th><th>Status</th><th>Envio</th><th>Reanálise</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -48,6 +48,10 @@ function getDb(){
     return db || defaults;
   } catch(e) { return defaults; }
 }
+function saveDb(db){
+  const key = 'mav_it_data_' + currentUser();
+  localStorage.setItem(key, JSON.stringify(db));
+}
 // --- FIM DO BLOCO DE UTILIDADES ---
 
 function renderTable(){
@@ -55,24 +59,29 @@ function renderTable(){
   const tbody = document.querySelector('#tb_list tbody');
   tbody.innerHTML = '';
 
-  if(db.atestados.length === 0){
-    tbody.innerHTML = '<tr><td colspan="6" class="small">Nenhum atestado finalizado encontrado.</td></tr>';
+  if(db.requisicoes.length === 0){
+    tbody.innerHTML = '<tr><td colspan="8" class="small">Nenhuma requisição encontrada.</td></tr>';
     return;
   }
 
-  db.atestados.forEach((item, idx) => {
+  db.requisicoes.forEach((item, idx) => {
     const tr = document.createElement('tr');
     const statusBadge = item.status === 'Aprovado' ? `<span class="badge ok">APROVADO</span>` : `<span class="badge error">REPROVADO</span>`;
+    const reanaliseButton = item.status === 'Reprovado' ? `<button class="btn small-btn" data-action="reanalise" data-idx="${idx}">Solicitar</button>` : '-';
     
     tr.innerHTML = `
       <td class="actions">
-        <button class="btn small-btn" data-action="ver" data-idx="${idx}">Ver</button>
+        <button class="btn small-btn" data-action="aceitar" data-idx="${idx}">Aceitar</button>
+        <button class="btn secondary small-btn" data-action="arquivar" data-idx="${idx}">Arquivar</button>
+        <button class="btn secondary small-btn" data-action="ver" data-idx="${idx}">Ver</button>
       </td>
       <td>${item.port || '-'}</td>
+      <td>${item.tipo || '-'}</td>
       <td>${item.ship || '-'}</td>
       <td>${item.imo || '-'}</td>
       <td>${statusBadge}</td>
       <td>${item.ts || '-'}</td>
+      <td>${reanaliseButton}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -82,13 +91,27 @@ document.getElementById('tb_list').addEventListener('click', (e) => {
   const action = e.target.getAttribute('data-action');
   const idx = parseInt(e.target.getAttribute('data-idx'));
 
-  if (action === 'ver' && !isNaN(idx)) {
-    const db = getDb();
-    const item = db.atestados[idx];
-    if(item){
-      localStorage.setItem('bw_snapshot', JSON.stringify(item.snapshot));
-      window.location.href = 'termo-final.html';
-    }
+  if (!action || isNaN(idx)) return;
+
+  const db = getDb();
+  const item = db.requisicoes[idx];
+  if (!item) return;
+
+  if (action === 'aceitar') {
+    const [movedItem] = db.requisicoes.splice(idx, 1);
+    db.atestados.unshift(movedItem);
+    saveDb(db);
+    renderTable();
+  } else if (action === 'arquivar') {
+    const [movedItem] = db.requisicoes.splice(idx, 1);
+    db.arquivados.unshift(movedItem);
+    saveDb(db);
+    renderTable();
+  } else if (action === 'ver') {
+    localStorage.setItem('bw_snapshot', JSON.stringify(item.snapshot));
+    window.location.href = 'termo-final.html';
+  } else if (action === 'reanalise') {
+    alert('Funcionalidade de reanálise simulada. Em um sistema real, isso iniciaria um novo processo no back-end.');
   }
 });
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Meus Atestados • Água de Lastro • MAV-IT</title>
+<title>Arquivados • Água de Lastro • MAV-IT</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,8 +13,8 @@
       <nav class="sidebar-nav">
         <a href="dashboard.html" class="nav-item">Novo Atestado</a>
         <a href="minhas-requisicoes.html" class="nav-item">Minhas Requisições</a>
-        <a href="meus-atestados.html" class="nav-item active">Meus Atestados</a>
-        <a href="arquivados.html" class="nav-item">Arquivados</a>
+        <a href="meus-atestados.html" class="nav-item">Meus Atestados</a>
+        <a href="arquivados.html" class="nav-item active">Arquivados</a>
         <a href="cadastro-usuarios.html" class="nav-item">Cadastro de Usuários</a>
         <a href="financeiro.html" class="nav-item">Financeiro</a>
         <a href="suporte.html" class="nav-item">Suporte Técnico</a>
@@ -26,10 +26,10 @@
     <main class="main-content">
       <div class="container">
         <div class="card">
-          <h2 class="section-title">Meus Atestados de Conformidade</h2>
-          <div class="sub">Listagem dos atestados finalizados (aceitos) pelo seu usuário.</div>
-          <table class="table" id="tb_list">
-            <thead><tr><th>Ação</th><th>Porto</th><th>Nome da Embarcação</th><th>Número IMO</th><th>Resultado</th><th>Data da Liberação</th></tr></thead>
+          <h2 class="section-title">Atestados Arquivados</h2>
+          <div class="sub">Listagem de requisições que foram arquivadas/canceladas.</div>
+           <table class="table" id="tb_list">
+            <thead><tr><th>Ação</th><th>Porto</th><th>Nome da Embarcação</th><th>Número IMO</th><th>Status ao Arquivar</th><th>Data</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -55,19 +55,16 @@ function renderTable(){
   const tbody = document.querySelector('#tb_list tbody');
   tbody.innerHTML = '';
 
-  if(db.atestados.length === 0){
-    tbody.innerHTML = '<tr><td colspan="6" class="small">Nenhum atestado finalizado encontrado.</td></tr>';
+  if(db.arquivados.length === 0){
+    tbody.innerHTML = '<tr><td colspan="6" class="small">Nenhum item arquivado.</td></tr>';
     return;
   }
 
-  db.atestados.forEach((item, idx) => {
+  db.arquivados.forEach((item, idx) => {
     const tr = document.createElement('tr');
     const statusBadge = item.status === 'Aprovado' ? `<span class="badge ok">APROVADO</span>` : `<span class="badge error">REPROVADO</span>`;
-    
     tr.innerHTML = `
-      <td class="actions">
-        <button class="btn small-btn" data-action="ver" data-idx="${idx}">Ver</button>
-      </td>
+      <td class="actions"><button class="btn small-btn" data-action="ver" data-idx="${idx}">Ver</button></td>
       <td>${item.port || '-'}</td>
       <td>${item.ship || '-'}</td>
       <td>${item.imo || '-'}</td>
@@ -81,17 +78,15 @@ function renderTable(){
 document.getElementById('tb_list').addEventListener('click', (e) => {
   const action = e.target.getAttribute('data-action');
   const idx = parseInt(e.target.getAttribute('data-idx'));
-
   if (action === 'ver' && !isNaN(idx)) {
     const db = getDb();
-    const item = db.atestados[idx];
+    const item = db.arquivados[idx];
     if(item){
       localStorage.setItem('bw_snapshot', JSON.stringify(item.snapshot));
       window.location.href = 'termo-final.html';
     }
   }
 });
-
 renderTable();
 </script>
 </body>

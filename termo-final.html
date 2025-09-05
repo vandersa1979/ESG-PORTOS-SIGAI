@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -32,8 +31,8 @@
         <div class="field-row"><div class="lab">IMO</div><div id="f_imo"></div></div>
         <div class="field-row"><div class="lab">Porto de chegada</div><div id="f_port"></div></div>
         <div class="field-row"><div class="lab">Data de chegada</div><div id="f_date"></div></div>
-        <div class="field-row"><div class="lab">Volume a bordo (m³)</div><div id="f_onb"></div></div>
-        <div class="field-row"><div class="lab">Volume a descarregar (m³)</div><div id="f_dis"></div></div>
+        <div class="field-row" style="display:none;"><div class="lab">Volume a bordo (m³)</div><div id="f_onb"></div></div>
+        <div class="field-row" style="display:none;"><div class="lab">Volume a descarregar (m³)</div><div id="f_dis"></div></div>
       </div>
 
       <h2 class="section-title">2) Certificados</h2>
@@ -44,7 +43,8 @@
 
       <h2 class="section-title" style="margin-top:8px">3) Crítica de Conformidade</h2>
       <table class="table" id="tbl-div">
-        <tr><th>Campo</th><th>Valores</th><th>Status</th></tr>
+        <thead><tr><th>Campo</th><th>Valores Apresentados</th><th>Status</th></tr></thead>
+        <tbody></tbody>
       </table>
 
       <h2 class="section-title" style="margin-top:8px">4) Resumo das Não Conformidades (texto)</h2>
@@ -61,53 +61,18 @@
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px" class="no-print">
       <button class="btn" onclick="baixarPDF()">Baixar PDF (1 folha)</button>
       <button class="btn secondary" onclick="window.print()">Imprimir</button>
+      <button class="btn secondary" onclick="history.back()">Voltar</button>
     </div>
   </div>
 
 <script>
-function currentUser(){ return localStorage.getItem('usuarioLogado')||'anon'; }
-
-function saveToHistory(snapshot){
-  try{
-    const key = 'atestados_'+currentUser();
-    const arr = JSON.parse(localStorage.getItem(key)||'[]');
-    if(!arr.find(x => x.hash===snapshot.hash && x.ts===snapshot.ts)){
-      arr.unshift({
-        id: snapshot.hash.slice(0,10)+'_'+Date.now(),
-        ship: snapshot.inputs?.nome_embarcacao||'',
-        imo: snapshot.inputs?.imo||'',
-        port: snapshot.inputs?.porto_chegada||'',
-        ts: snapshot.ts,
-        approved: snapshot.approved,
-        hash: snapshot.hash,
-        snapshot: snapshot
-      });
-      localStorage.setItem(key, JSON.stringify(arr));
-    }
-  }catch(e){ console.warn('history save error', e); }
-}
-
 function buildNcText(diverg, findings){
   if(diverg.length===0){
     return '<span class="badge ok">Sem não conformidades</span>';
   }
-  // Mapa de rótulos por campo (alinha na mesma ordem usada no compare)
-  const srcMap = {
-    shipName:['Digitado','IBWMC','BWRF','IBWMP'],
-    imo:['Digitado','IBWMC'],
-    arrivalPort:['Digitado','BWRF'],
-    arrivalDate:['Digitado','BWRF'],
-    totalOnBoard:['Digitado','BWRF'],
-    totalToDischarge:['Digitado','BWRF'],
-    method:['IBWMC','IBWMP'],
-    manufacturer:['IBWMC','IBWMS'],
-    bwmsName:['IBWMS'],
-    approval:['IBWMS'],
-    validUntil:['IBWMC']
-  };
   const lines = diverg.map(f=>{
-    const labs = f.labels || srcMap[f.field] || [];
-    const pairs = (f.values||[]).map((v,i)=>`${labs[i]||('Fonte '+(i+1))}: "${String(v)}"`).join('; ');
+    const labs = f.labels || [];
+    const pairs = (f.valuesOriginal || f.values).map((v,i)=>`${labs[i]||('Fonte '+(i+1))}: "${String(v)}"`).join('; ');
     return `• <b>${f.label}:</b> ${pairs}.`;
   });
   return '<ul style="margin:6px 0 0 16px;"><li>'+lines.join('</li><li>')+'</li></ul>';
@@ -115,9 +80,14 @@ function buildNcText(diverg, findings){
 
 function fill(){
   const fromHistory = JSON.parse(localStorage.getItem('bw_snapshot')||'null');
-  const inputs = fromHistory?.inputs || JSON.parse(localStorage.getItem('bw_inputs')||'{}');
-  const docs = fromHistory?.docs || JSON.parse(localStorage.getItem('bw_docs')||'{}');
-  const findings = fromHistory?.findings || JSON.parse(localStorage.getItem('bw_findings')||'[]');
+  if(!fromHistory) {
+      document.body.innerHTML = '<h1>Erro: Nenhum snapshot encontrado para exibir.</h1><p>Por favor, volte e selecione um atestado para visualizar.</p><button onclick="history.back()">Voltar</button>';
+      return;
+  }
+  
+  const inputs = fromHistory?.inputs || {};
+  const docs = fromHistory?.docs || {};
+  const findings = fromHistory?.findings || [];
 
   const get = (v)=> v==null||v===''?'-':String(v);
   document.getElementById('f_ship').textContent = get(inputs.nome_embarcacao);
@@ -133,24 +103,25 @@ function fill(){
   document.getElementById('ibwms_desc').textContent = get(`${ibwms.bwmsName||'n/d'} • Approval ${ibwms.approval||'n/d'}`);
   document.getElementById('ibwms_exp').textContent = get(ibwms.expires||'n/d');
 
-  const table = document.getElementById('tbl-div');
-  const diverg = findings.filter(f=>!f.match);
-  if(diverg.length===0){
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="3"><span class="badge ok">SEM DIVERGÊNCIAS</span></td>`;
-    table.appendChild(tr);
-  } else {
-    diverg.forEach(f=>{
-      const labs = f.labels || [];
+  const tbody = document.querySelector('#tbl-div tbody');
+  tbody.innerHTML = '';
+  
+  // Filtra os findings para não exibir os campos de volume na crítica
+  const filteredFindings = findings.filter(f => f.field !== 'totalOnBoard' && f.field !== 'totalToDischarge');
+
+  filteredFindings.forEach(f=>{
       const tr = document.createElement('tr');
-      const vals = (f.values||[]).map((v,i)=>`${labs[i]?('<b>'+labs[i]+':</b> '):''}${String(v)}`).join(' • ');
-      tr.innerHTML = `<td>${f.label}</td><td>${vals}</td><td><span class="badge error">NÃO CONFORME</span></td>`;
-      table.appendChild(tr);
+      const labs = f.labels || [];
+      const vals = (f.valuesOriginal || f.values).map((v,i)=>`${labs[i]?('<b>'+labs[i]+':</b> '):''}${String(v)}`).join(' • ');
+      const statusBadge = f.match ? '<span class="badge ok">CONFORME</span>' : '<span class="badge error">NÃO CONFORME</span>';
+      tr.innerHTML = `<td>${f.label}</td><td>${vals}</td><td>${statusBadge}</td>`;
+      tbody.appendChild(tr);
     });
-  }
+
+  const diverg = findings.filter(f=>!f.match);
   document.getElementById('nc-text').innerHTML = buildNcText(diverg, findings);
 
-  const approved = fromHistory?.approved ?? (diverg.length===0);
+  const approved = fromHistory?.approved;
   const statusCell = document.getElementById('statusCell');
   if(approved){
     statusCell.innerHTML = '<span class="badge ok">APROVADO</span>';
@@ -158,87 +129,21 @@ function fill(){
     statusCell.innerHTML = '<span class="badge error">REPROVADO POR CONTER NÃO CONFORMIDADES</span>';
   }
 
-  if(fromHistory){
-    document.getElementById('ts').textContent = fromHistory.ts;
-    document.getElementById('hash').textContent = fromHistory.hash;
-  }else{
-    const now = new Date();
-    const ts = now.toLocaleString(undefined,{hour12:false});
-    document.getElementById('ts').textContent = ts;
-    const payload = JSON.stringify({inputs, docs, findings, ts, approved});
-    const enc = new TextEncoder().encode(payload);
-    crypto.subtle.digest('SHA-256', enc).then(buf=>{
-      const hashArr = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-      document.getElementById('hash').textContent = hashArr;
-      const snapshot = {inputs, docs, findings, ts, approved, hash: hashArr};
-      saveToHistory(snapshot);
-    });
-  }
+  document.getElementById('ts').textContent = fromHistory.ts;
+  document.getElementById('hash').textContent = fromHistory.hash;
+
   localStorage.removeItem('bw_snapshot');
 }
 
-
-function buildRecordForGitHub(){
-  // Monta payload padronizado para gravação
-  const fromHistory = JSON.parse(localStorage.getItem('bw_snapshot')||'null');
-  const inputs = fromHistory?.inputs || JSON.parse(localStorage.getItem('bw_inputs')||'{}');
-  const docs = fromHistory?.docs || JSON.parse(localStorage.getItem('bw_docs')||'{}');
-  const findings = fromHistory?.findings || JSON.parse(localStorage.getItem('bw_findings')||'[]');
-  const ts = document.getElementById('ts')?.textContent || new Date().toLocaleString();
-  const hash = document.getElementById('hash')?.textContent || null;
-  // Padroniza campos principais
-  const record = {
-    empresa: inputs.empresa || inputs.cliente || "",
-    navio: inputs.nome_embarcacao || "",
-    imo: inputs.imo || "",
-    carga: inputs.carga || "",
-    tipo_gerenciamento: (docs.IBWMC?.method || inputs.tipo_gerenciamento || "").toUpperCase(),
-    tipo_operacao: (inputs.tipo_operacao || "").toUpperCase(),
-    porto_destino: "SANTOS", // conforme orientação
-    data_chegada: inputs.data_chegada || "",
-    volume_bordo: inputs.volume_bordo || "",
-    volume_descarga: inputs.volume_descarga || "",
-    status_atestado: document.querySelector('#statusCell .badge.ok') ? "ATESTADO_DE_CONFORMIDADE" : "NAO_CONFORME",
-    ts_local: ts,
-    pdf_hash_sha256: hash,
-    docs: docs,
-    nao_conformes: findings
-  };
-  return record;
-}
-
-async function baixarPDF(){
-
+function baixarPDF(){
   const node = document.getElementById('capture');
   const opt = { margin:0, filename:'ATESTADO_DE_CONFORMIDADE_MAVIT.pdf',
     image:{ type:'jpeg', quality:0.98 },
     html2canvas:{ scale:2, useCORS:true, letterRendering:true },
     jsPDF:{ unit:'mm', format:'a4', orientation:'portrait' } };
-  
-  // Tenta salvar no GitHub antes de baixar
-  try{
-    if (window.salvarNoGitHub) {
-      const rec = buildRecordForGitHub();
-      const resp = await window.salvarNoGitHub(rec);
-      console.log('Gravado no GitHub:', resp);
-      alert(`Registro salvo no GitHub!\nID: ${resp.id || '(via server)'}\n${resp.path||''}`);
-    } else {
-      console.warn('salvarNoGitHub não disponível - verifique db/db.js');
-    }
-  }catch(e){
-    console.error('Falha ao salvar no GitHub:', e);
-    alert('Não foi possível salvar no GitHub agora. O PDF será baixado normalmente.');
-  }
   html2pdf().set(opt).from(node).save();
-
 }
 fill();
 </script>
-
-    <!-- DB on GitHub -->
-    <script src="db/config.js"></script>
-    <script src="db/read.js"></script>
-    <script src="db/db.js"></script>
-
 </body>
 </html>
